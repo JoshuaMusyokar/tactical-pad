@@ -9,7 +9,7 @@ class MyDuolingo extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       theme: ThemeData(
-        primaryColor: const Color(0xFFfb2b4d), // Set the primary color
+        primarySwatch: Colors.blue,
       ),
       routes: {
         // '/': (context) => PitchPainter(),

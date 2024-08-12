@@ -34,9 +34,15 @@ class DrawerMenu extends StatelessWidget {
             onTap: () => onActionSelected('open_projects'),
           ),
           ListTile(
+            // Icons.person_add, 'Add Player'
+            leading: Icon(Icons.person_add),
+            title: Text('Add Players'),
+            onTap: () => onActionSelected('Add Player'),
+          ),
+          ListTile(
             leading: Icon(Icons.save),
             title: Text('Save'),
-            onTap: () => onActionSelected('save'),
+            onTap: () => onActionSelected('save_project'),
           ),
           ListTile(
             leading: Icon(Icons.save_alt),

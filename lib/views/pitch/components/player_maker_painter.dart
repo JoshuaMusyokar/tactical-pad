@@ -24,7 +24,7 @@ class PlayerMarker extends StatelessWidget {
 
   Widget buildPlayerMarker() {
     return Image.asset(
-      'lib/assets/player.png',
+      'lib/assets/player.jpeg',
       width: 40,
       height: 80,
     );
