@@ -7,10 +7,12 @@ import 'package:tactical_pad/views/pitch/components/ball_maker.dart';
 import 'package:tactical_pad/views/pitch/components/coach_maker.dart';
 import 'package:tactical_pad/views/pitch/components/cone_maker.dart';
 import 'package:tactical_pad/views/pitch/components/create_project_dialogue.dart';
+import 'package:tactical_pad/views/pitch/components/object_menu.dart';
 import 'package:tactical_pad/views/pitch/components/player_maker_painter.dart';
 import 'package:tactical_pad/views/pitch/components/timer_banner.dart';
 import 'package:tactical_pad/views/pitch/frame_player.dart';
 import 'package:tactical_pad/views/pitch/repository_screen.dart';
+import 'package:tactical_pad/views/widgets/bottomsheet.dart';
 import 'components/pitch_painter.dart';
 import 'components/action_menu.dart';
 import 'components/drawer_menu.dart';
@@ -42,20 +44,22 @@ class _TacticalPadState extends State<TacticalPad> {
     ballPositions = [];
   }
 
-  void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-    if (index == 0) {
-      _showActionMenu();
-    }
-  }
-
-  void _showActionMenu() {
+  // void _showActionMenu() {
+  //   showModalBottomSheet(
+  //     context: context,
+  //     builder: (BuildContext context) {
+  //       // return ActionMenu(onActionSelected: _onActionSelected);
+  //       return ObjectsMenu();
+  //     },
+  //   );
+  // }
+  void _showActionMenu(BuildContext context) {
     showModalBottomSheet(
       context: context,
+      backgroundColor: Colors.transparent, // Make the background transparent
+      isScrollControlled: true, // Allows for controlling the height
       builder: (BuildContext context) {
-        return ActionMenu(onActionSelected: _onActionSelected);
+        return buildFancyModalBottomSheet(context);
       },
     );
   }
@@ -219,36 +223,43 @@ class _TacticalPadState extends State<TacticalPad> {
 
   @override
   Widget build(BuildContext context) {
+    void _onItemTapped(int index) {
+      setState(() {
+        _selectedIndex = index;
+      });
+      if (index == 0) {
+        _showActionMenu(context);
+      }
+    }
+
+    final padding = MediaQuery.of(context).size.height * 0.12;
     return Scaffold(
       appBar: AppBar(
-        title: Text('Tactical Pad'),
+        title: const Text('Tactical Pad'),
         flexibleSpace: Container(
-          decoration: BoxDecoration(
+          decoration: const BoxDecoration(
             gradient: LinearGradient(
-              colors: [
-                Color.fromARGB(255, 166, 92, 245),
-                Color.fromARGB(255, 116, 100, 218)
-              ],
+              colors: [Color(0xFF2E74B8), Color(0xFF2A5D83)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
           ),
         ),
         actions: [
-          PopupMenuButton<String>(
-            onSelected: _onActionSelected,
-            itemBuilder: (BuildContext context) {
-              return [
-                PopupMenuItem(value: 'new_project', child: Text('New Project')),
-                PopupMenuItem(
-                    value: 'save_project', child: Text('Save Project')),
-                PopupMenuItem(
-                    value: 'load_project', child: Text('Load Project')),
-                PopupMenuItem(
-                    value: 'record_timeframe', child: Text('Record Timeframe')),
-              ];
-            },
-          ),
+          // PopupMenuButton<String>(
+          //   onSelected: _onActionSelected,
+          //   itemBuilder: (BuildContext context) {
+          //     return [
+          //       PopupMenuItem(value: 'new_project', child: Text('New Project')),
+          //       PopupMenuItem(
+          //           value: 'save_project', child: Text('Save Project')),
+          //       PopupMenuItem(
+          //           value: 'load_project', child: Text('Load Project')),
+          //       PopupMenuItem(
+          //           value: 'record_timeframe', child: Text('Record Timeframe')),
+          //     ];
+          //   },
+          // ),
           IconButton(
             icon: Icon(Icons.save),
             onPressed: _saveProject,
@@ -275,15 +286,15 @@ class _TacticalPadState extends State<TacticalPad> {
       body: LayoutBuilder(
         builder: (context, constraints) {
           return Padding(
-            padding: const EdgeInsets.all(20.0),
+            padding: EdgeInsets.symmetric(horizontal: 0, vertical: 0),
             child: Container(
               width: double.infinity,
               height: double.infinity,
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 image: DecorationImage(
                   image: AssetImage(
                       'lib/assets/paddle-pitch.jpeg'), // Replace with your image path
-                  fit: BoxFit.cover, // Adjust this as needed
+                  fit: BoxFit.fill, // Adjust this as needed
                 ),
               ),
               child: Stack(
@@ -365,14 +376,15 @@ class _TacticalPadState extends State<TacticalPad> {
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [
-              Color.fromARGB(255, 166, 92, 245),
-              Color.fromARGB(255, 116, 100, 218)
+              Color.fromARGB(255, 209, 208, 210),
+              Color.fromARGB(255, 166, 165, 171)
             ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
         ),
         child: BottomNavigationBar(
+          backgroundColor: Color(0xFF2A5D83),
           items: [
             BottomNavigationBarItem(
               icon: Icon(Icons.add),
