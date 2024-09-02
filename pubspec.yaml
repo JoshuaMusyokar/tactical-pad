@@ -37,6 +37,15 @@ dependencies:
   path_provider: ^2.1.4
   sqflite: ^2.3.3+1
   google_fonts: ^6.2.1
+  flutter_launcher_icons: ^0.13.1
+  screen_recorder: ^0.3.0
+  file_picker: ^8.1.2
+  video_player: ^2.9.1
+  share_plus: ^10.0.2
+  permission_handler: ^11.3.1
+  flutter_hooks: ^0.20.5
+  flutter_colorpicker: ^1.1.0
+  ffmpeg_kit_flutter: ^6.0.3
 
 dev_dependencies:
   flutter_test:
@@ -65,7 +74,10 @@ flutter:
     - lib/assets/
     # - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
-
+flutter_icons:
+  android: true
+  ios: true
+  image_path: lib/assets/icon/app_icon.jpeg
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware
 

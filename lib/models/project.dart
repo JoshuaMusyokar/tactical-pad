@@ -181,6 +181,45 @@ class Project {
           List<Map<String, dynamic>>.from(jsonDecode(map['recordedFrames'])),
     );
   }
+  List<Map<String, dynamic>> movementHistory = [];
+  final Map<String, List<Offset>> coordinates = {};
+
+  void addCoordinate(Offset position, String objectType) {
+    if (coordinates.containsKey(objectType)) {
+      coordinates[objectType]!.add(position);
+    } else {
+      coordinates[objectType] = [position];
+    }
+  }
+
+  void updateCoordinate(Offset newPosition, String objectType) {
+    if (coordinates.containsKey(objectType)) {
+      final index = coordinates[objectType]!
+          .indexWhere((position) => position == newPosition);
+      if (index != -1) {
+        coordinates[objectType]![index] = newPosition;
+      } else {
+        coordinates[objectType]!.add(newPosition);
+      }
+    } else {
+      coordinates[objectType] = [newPosition];
+    }
+  }
+
+  Map<String, List<Offset>> getCoordinates() {
+    return coordinates;
+  }
+
+  void recordMovement(
+      String objectType, int index, Offset oldPosition, Offset newPosition) {
+    movementHistory.add({
+      'objectType': objectType,
+      'index': index,
+      'oldPosition': oldPosition,
+      'newPosition': newPosition,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    });
+  }
 }
 
 class Timeframe {

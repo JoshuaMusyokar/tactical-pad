@@ -22,7 +22,7 @@ class MyDuolingo extends StatelessWidget {
         // '/add_question': (context) => AddQuestionScreen()
       },
       debugShowCheckedModeBanner: false,
-      title: 'Tactical pad',
+      title: 'PLP Tactical Board',
       // home: const WelcomeScreen(),
     );
   }

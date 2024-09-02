@@ -1,151 +1,144 @@
 import 'package:flutter/material.dart';
 
-class FramePlaybackWidget extends StatefulWidget {
-  final List<Map<String, dynamic>> frames;
+class CoordinateAnimationScreen extends StatefulWidget {
+  final Map<String, List<Offset>> coordinates;
 
-  FramePlaybackWidget({required this.frames});
+  CoordinateAnimationScreen({required this.coordinates});
 
   @override
-  _FramePlaybackWidgetState createState() => _FramePlaybackWidgetState();
+  _CoordinateAnimationScreenState createState() =>
+      _CoordinateAnimationScreenState();
 }
 
-class _FramePlaybackWidgetState extends State<FramePlaybackWidget>
+class _CoordinateAnimationScreenState extends State<CoordinateAnimationScreen>
     with TickerProviderStateMixin {
   late AnimationController _animationController;
-  late Animation<double> _animation;
+  late Animation<Offset> _animation;
+  late int _currentIndex;
+  late String _currentObjectType;
+
+  // Map to store image assets for each object type
+  final Map<String, String> _objectImages = {
+    "ball": 'lib/assets/ball.png',
+    "agility": 'lib/assets/agility.png',
+    "strip": 'lib/assets/strip.png',
+    "Low_cone": 'lib/assets/low_cone.png',
+    "cone": 'lib/assets/cone.png',
+    "podelprit": 'lib/assets/podelprit.png',
+    "vertical_basket": 'lib/assets/vertical_basket.png',
+    "basket": 'lib/assets/basket.png',
+    "player": 'lib/assets/player.png',
+    "coach": 'lib/assets/coach.png',
+  };
 
   @override
   void initState() {
     super.initState();
-    if (widget.frames.isNotEmpty) {
-      final firstFrame = widget.frames.first;
-      final lastFrame = widget.frames.last;
+    _currentIndex = 0;
+    _currentObjectType = widget.coordinates.keys.first;
 
-      final startTime = firstFrame['timestamp'] ?? 0;
-      final endTime = lastFrame['timestamp'] ?? 0;
-
-      // Slow down animation by increasing the duration
-      final duration =
-          Duration(milliseconds: ((endTime - startTime) * 2).clamp(1, 20000));
-
-      _animationController = AnimationController(
-        vsync: this,
-        duration: duration,
-      )..repeat(); // Use repeat() for continuous animation
-
-      _animation =
-          Tween<double>(begin: 0, end: 1).animate(_animationController);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black54, // Modal background color
-      body: Center(
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8.0),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.2),
-                spreadRadius: 5,
-                blurRadius: 7,
-                offset: Offset(0, 3), // changes position of shadow
-              ),
-            ],
-          ),
-          width: MediaQuery.of(context).size.width * 0.9,
-          height: MediaQuery.of(context).size.height * 0.9,
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: Image.asset(
-                  'lib/assets/paddle-pitch.jpeg', // Paddle pitch background
-                  fit: BoxFit.cover,
-                ),
-              ),
-              AnimatedBuilder(
-                animation: _animation,
-                builder: (context, child) {
-                  final frameIndex =
-                      (_animation.value * (widget.frames.length - 1)).toInt();
-                  if (frameIndex < 0 || frameIndex >= widget.frames.length)
-                    return Container();
-
-                  final frame = widget.frames[frameIndex];
-
-                  return Stack(
-                    children: [
-                      if (frame['playerPositions'] != null &&
-                          frame['playerPositions'].isNotEmpty)
-                        Positioned(
-                          left: frame['playerPositions'][0]['dx'] ?? 0.0,
-                          top: frame['playerPositions'][0]['dy'] ?? 0.0,
-                          child: SizedBox(
-                            width: 50, // Set width according to your needs
-                            height: 50, // Set height according to your needs
-                            child: Image.asset('lib/assets/player.png'),
-                          ),
-                        ),
-                      if (frame['coachPositions'] != null &&
-                          frame['coachPositions'].isNotEmpty)
-                        Positioned(
-                          left: frame['coachPositions'][0]['dx'] ?? 0.0,
-                          top: frame['coachPositions'][0]['dy'] ?? 0.0,
-                          child: SizedBox(
-                            width: 50, // Set width according to your needs
-                            height: 50, // Set height according to your needs
-                            child: Image.asset('lib/assets/coach.png'),
-                          ),
-                        ),
-                      if (frame['conePositions'] != null &&
-                          frame['conePositions'].isNotEmpty)
-                        Positioned(
-                          left: frame['conePositions'][0]['dx'] ?? 0.0,
-                          top: frame['conePositions'][0]['dy'] ?? 0.0,
-                          child: SizedBox(
-                            width: 30, // Set width according to your needs
-                            height: 30, // Set height according to your needs
-                            child: Image.asset('lib/assets/cone.png'),
-                          ),
-                        ),
-                      if (frame['ballPositions'] != null &&
-                          frame['ballPositions'].isNotEmpty)
-                        Positioned(
-                          left: frame['ballPositions'][0]['dx'] ?? 0.0,
-                          top: frame['ballPositions'][0]['dy'] ?? 0.0,
-                          child: SizedBox(
-                            width: 20, // Set width according to your needs
-                            height: 20, // Set height according to your needs
-                            child: Image.asset('lib/assets/ball.png'),
-                          ),
-                        ),
-                    ],
-                  );
-                },
-              ),
-              Positioned(
-                top: 16,
-                right: 16,
-                child: IconButton(
-                  icon: Icon(Icons.close, color: Colors.black),
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 3000),
+      vsync: this,
     );
+
+    _startAnimation();
   }
 
   @override
   void dispose() {
     _animationController.dispose();
     super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Tactical Pad'),
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF2E74B8), Color(0xFF2A5D83)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
+      ),
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('lib/assets/paddle-pitch.jpeg'),
+            fit: BoxFit.fill,
+          ),
+        ),
+        child: Stack(
+          clipBehavior: Clip.hardEdge,
+          children: [
+            AnimatedBuilder(
+              animation: _animation,
+              builder: (context, child) {
+                return Transform.translate(
+                  offset: _animation.value,
+                  child: child,
+                );
+              },
+              child: Image.asset(
+                _objectImages[_currentObjectType] ?? 'lib/assets/cone.png',
+                width: 48,
+                height: 48,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _startAnimation() {
+    if (widget.coordinates.containsKey(_currentObjectType) &&
+        widget.coordinates[_currentObjectType]!.isNotEmpty) {
+      _animation = Tween<Offset>(
+        begin: widget.coordinates[_currentObjectType]!.first,
+        end: widget.coordinates[_currentObjectType]!.last,
+      ).animate(_animationController);
+
+      _animationController.forward().whenComplete(() {
+        _animateToNextCoordinate();
+      });
+    }
+  }
+
+  void _animateToNextCoordinate() {
+    if (_currentIndex < widget.coordinates[_currentObjectType]!.length - 1) {
+      _currentIndex++;
+      _animationController.reset();
+
+      _animation = Tween<Offset>(
+        begin: widget.coordinates[_currentObjectType]![_currentIndex - 1],
+        end: widget.coordinates[_currentObjectType]![_currentIndex],
+      ).animate(_animationController);
+
+      _animationController.forward().whenComplete(() {
+        _animateToNextCoordinate();
+      });
+    } else {
+      _switchObjectType();
+    }
+  }
+
+  void _switchObjectType() {
+    final objectTypes = widget.coordinates.keys.toList();
+    final currentIndex = objectTypes.indexOf(_currentObjectType);
+
+    if (currentIndex < objectTypes.length - 1) {
+      _currentObjectType = objectTypes[currentIndex + 1];
+      _currentIndex = 0;
+
+      _startAnimation();
+    }
   }
 }
