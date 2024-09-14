@@ -15,6 +15,7 @@ import 'package:tactical_pad/views/pitch/components/animation.dart';
 // import 'package:tactical_pad/views/pitch/components/coach_maker.dart';
 // import 'package:tactical_pad/views/pitch/components/cone_maker.dart';
 import 'package:tactical_pad/views/pitch/components/create_project_dialogue.dart';
+import 'package:tactical_pad/views/pitch/components/custom-bottom.dart';
 import 'package:tactical_pad/views/pitch/components/draw.dart';
 import 'package:tactical_pad/views/pitch/components/makers.dart';
 import 'package:tactical_pad/views/pitch/components/object_maker.dart';
@@ -53,11 +54,16 @@ class _TacticalPadState extends State<TacticalPad>
   late List<Offset> podelpritPositions;
   late List<Offset> basketPositions;
   late List<Offset> lowConePositions;
+  DrawingObject? _selectedDrawingObject;
+  Offset? _dragStartPosition;
+  Offset? _dragOffset;
   bool _isEraseMode = false;
   int _selectedIndex = 0;
   String? _currentProjectName;
   Project? _currentProject;
   bool _isRecording = false;
+  int _frameCount = 0;
+  double _progress = 0.0;
   // late Timer _recordingTimer;
   Duration _recordingTime = Duration.zero;
   late Map<String, List<Offset>> _positions;
@@ -75,7 +81,7 @@ class _TacticalPadState extends State<TacticalPad>
   String? _videoPath;
   VideoPlayerController? _videoPlayerController;
   bool _isVideoOverlayVisible = false;
-
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   String _debugInfo = '';
   // bool _isRecording = false;
 
@@ -127,7 +133,7 @@ class _TacticalPadState extends State<TacticalPad>
   void _handleErase(Offset position) {
     setState(() {
       final painter = DrawingPainter(_drawingObjects);
-      painter.erase(position, 10.0); // Adjust the tolerance as needed
+      // painter.erase(position, 10.0); // Adjust the tolerance as needed
     });
   }
 
@@ -143,10 +149,52 @@ class _TacticalPadState extends State<TacticalPad>
     );
   }
 
-  void _toggleVideoOverlay() {
-    setState(() {
-      _isVideoOverlayVisible = !_isVideoOverlayVisible;
-    });
+  Future<void> _initializeVideoPlayer() async {
+    if (_videoPath != null && _videoPath!.isNotEmpty) {
+      File videoFile = File(_videoPath!);
+      if (await videoFile.exists()) {
+        try {
+          _videoPlayerController = VideoPlayerController.file(videoFile);
+          await _videoPlayerController!.initialize();
+          setState(() {}); // Trigger rebuild after initialization
+        } catch (e) {
+          print('Error initializing video player: $e');
+          // Handle the error (e.g., show an error message to the user)
+        }
+      } else {
+        print('Video file not found at $_videoPath');
+        // Handle the case when the file doesn't exist
+      }
+    } else {
+      print('Video path is null or empty');
+      // Handle the case when there's no video path
+    }
+  }
+
+  void _toggleVideoOverlay() async {
+    if (_videoPlayerController == null ||
+        !_videoPlayerController!.value.isInitialized) {
+      await _initializeVideoPlayer();
+    }
+
+    if (_videoPlayerController != null &&
+        _videoPlayerController!.value.isInitialized) {
+      setState(() {
+        _isVideoOverlayVisible = !_isVideoOverlayVisible;
+      });
+
+      if (_isVideoOverlayVisible) {
+        _videoPlayerController!.play();
+      } else {
+        _videoPlayerController!.pause();
+      }
+    } else {
+      // Show an error message or handle the case when video can't be played
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('Unable to play video. Please try again later.')),
+      );
+    }
   }
 
   void _onProjectCreated(String projectName) {
@@ -373,18 +421,46 @@ class _TacticalPadState extends State<TacticalPad>
     });
   }
 
+  // void _onPanStart(DragStartDetails details) {
+  //   if (_currentDrawingType != null) {
+  //     setState(() {
+  //       _currentDrawingPoints.add(details.localPosition);
+  //     });
+  //   }
+  // }
   void _onPanStart(DragStartDetails details) {
     if (_currentDrawingType != null) {
       setState(() {
         _currentDrawingPoints.add(details.localPosition);
       });
+    } else {
+      final hitObject = DrawingPainter(_drawingObjects)
+          .getObjectAtPoint(details.localPosition);
+      if (hitObject != null) {
+        setState(() {
+          _selectedDrawingObject = hitObject;
+          _dragStartPosition = details.localPosition;
+          _dragOffset = Offset.zero;
+        });
+      }
     }
   }
 
+  // void _onPanUpdate(DragUpdateDetails details) {
+  //   if (_currentDrawingType != null) {
+  //     setState(() {
+  //       _currentDrawingPoints.add(details.localPosition);
+  //     });
+  //   }
+  // }
   void _onPanUpdate(DragUpdateDetails details) {
     if (_currentDrawingType != null) {
       setState(() {
         _currentDrawingPoints.add(details.localPosition);
+      });
+    } else if (_selectedDrawingObject != null && _dragStartPosition != null) {
+      setState(() {
+        _dragOffset = details.localPosition - _dragStartPosition!;
       });
     }
   }
@@ -398,8 +474,27 @@ class _TacticalPadState extends State<TacticalPad>
           _finishDrawing();
         }
       });
+    } else if (_selectedDrawingObject != null && _dragOffset != null) {
+      setState(() {
+        _selectedDrawingObject!.translate(_dragOffset!);
+        _selectedDrawingObject = null;
+        _dragStartPosition = null;
+        _dragOffset = null;
+      });
     }
   }
+
+  // void _onPanEnd(DragEndDetails details) {
+  //   if (_currentDrawingType != null) {
+  //     setState(() {
+  //       if (_currentDrawingType == DrawingType.text) {
+  //         _showTextInputDialog();
+  //       } else {
+  //         _finishDrawing();
+  //       }
+  //     });
+  //   }
+  // }
 
   void _finishDrawing() {
     if (_currentDrawingPoints.isNotEmpty) {
@@ -489,21 +584,16 @@ class _TacticalPadState extends State<TacticalPad>
     );
   }
 
-  // New methods for screen recording
-  Future<void> _captureFrame() async {
-    RenderRepaintBoundary boundary = _repaintBoundaryKey.currentContext!
-        .findRenderObject() as RenderRepaintBoundary;
-    ui.Image image = await boundary.toImage(pixelRatio: 3.0);
-    _frames.add(image);
-  }
-
   Future<void> _startRecording() async {
     setState(() {
       _isRecording = true;
+      _frameCount = 0;
+      _progress = 0.0;
     });
+
     while (_isRecording) {
       await _captureFrame();
-      await Future.delayed(Duration(milliseconds: 33)); // Approx. 30 fps
+      await Future.delayed(Duration(milliseconds: 33)); // ~30 fps
     }
   }
 
@@ -511,76 +601,213 @@ class _TacticalPadState extends State<TacticalPad>
     setState(() {
       _isRecording = false;
     });
+    _showProgressDialog();
     await _compileFramesToVideo();
+    Navigator.of(context).pop(); // Dismiss progress dialog
+    _showVideoPreview();
   }
 
+  void _showVideoPreview() {
+    if (_videoPath != null) {
+      _videoPlayerController = VideoPlayerController.file(File(_videoPath!))
+        ..initialize().then((_) {
+          setState(() {});
+          _videoPlayerController!.play();
+        });
+
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            content: AspectRatio(
+              aspectRatio: _videoPlayerController!.value.aspectRatio,
+              child: VideoPlayer(_videoPlayerController!),
+            ),
+            actions: [
+              TextButton(
+                child: Text('Close'),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  _videoPlayerController!.dispose();
+                },
+              ),
+              TextButton(
+                child: Text('Save'),
+                onPressed: () {
+                  // Implement save functionality
+                  Navigator.of(context).pop();
+                  _showSaveConfirmation();
+                },
+              ),
+            ],
+          );
+        },
+      );
+    }
+  }
+
+  void _showSaveConfirmation() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Video saved successfully!'),
+        backgroundColor: Colors.green,
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _showProgressDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 20),
+              Text('Compiling video...'),
+              SizedBox(height: 10),
+              LinearProgressIndicator(value: _progress),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _captureFrame() async {
+    try {
+      RenderRepaintBoundary boundary = _repaintBoundaryKey.currentContext!
+          .findRenderObject() as RenderRepaintBoundary;
+      ui.Image image = await boundary.toImage(pixelRatio: 3.0);
+      _frames.add(image);
+      setState(() {
+        _frameCount++;
+      });
+    } catch (e) {
+      print('Error capturing frame: $e');
+    }
+  }
+
+  // Future<void> _compileFramesToVideo() async {
+  //   try {
+  //     Directory tempDir = await getTemporaryDirectory();
+  //     String framesDir = '${tempDir.path}/frames';
+  //     await Directory(framesDir).create(recursive: true);
+  //     print('Saving frames to $framesDir');
+
+  //     // Save each frame as an image
+  //     for (int i = 0; i < _frames.length; i++) {
+  //       final image = _frames[i];
+  //       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+  //       final file =
+  //           File('$framesDir/frame_${i.toString().padLeft(4, '0')}.png');
+  //       await file.writeAsBytes(byteData!.buffer.asUint8List());
+  //     }
+  //     print('Frames saved. Total frames: ${_frames.length}');
+
+  //     // Check first few frame files
+  //     print('First few frame files:');
+  //     for (int i = 0; i < min(_frames.length, 5); i++) {
+  //       File frame =
+  //           File('$framesDir/frame_${i.toString().padLeft(4, '0')}.png');
+  //       print('${frame.path} exists: ${await frame.exists()}');
+  //     }
+
+  //     // Compile images into video
+  //     Directory appDocDir = await getApplicationDocumentsDirectory();
+  //     _videoPath = "${appDocDir.path}/output.mp4";
+
+  //     print('Compiling video to $_videoPath');
+
+  //     // Simplified FFmpeg command
+  //     // String command =
+  //     //     "-y -framerate 30 -i '$framesDir/frame_%04d.png' -c:v libx264 -pix_fmt yuv420p '$_videoPath'";
+  //     // String command =
+  //     //     "-y -framerate 30 -i '$framesDir/frame_%04d.png' -c:v mpeg4 '$_videoPath'";
+  //     String command =
+  //         "-y -framerate 30 -i '${framesDir}/frame_%04d.png' -c:v mpeg4 -pix_fmt yuv420p -movflags +faststart '${_videoPath}'";
+
+  //     // Execute FFmpeg command
+  //     final session = await FFmpegKit.execute(command);
+  //     final returnCode = await session.getReturnCode();
+  //     final output = await session.getOutput();
+  //     final logs = await session.getLogs();
+
+  //     print('FFmpeg output: $output');
+  //     print('FFmpeg logs:');
+  //     for (Log log in logs) {
+  //       print('${log.getLevel()} - ${log.getMessage()}');
+  //     }
+
+  //     if (ReturnCode.isSuccess(returnCode)) {
+  //       print('Video compiled successfully');
+  //     } else {
+  //       print('Error compiling video. Return code: $returnCode');
+  //     }
+
+  //     // Check if the file exists and its size
+  //     File videoFile = File(_videoPath!);
+  //     if (await videoFile.exists()) {
+  //       print('Video file exists at $_videoPath');
+  //       print('File size: ${await videoFile.length()} bytes');
+  //     } else {
+  //       print('Video file does not exist at $_videoPath');
+  //     }
+
+  //     // Clear the frames
+  //     _frames.clear();
+  //   } catch (e) {
+  //     print('Error in compileFramesToVideo: $e');
+  //   }
+  // }
   Future<void> _compileFramesToVideo() async {
     try {
       Directory tempDir = await getTemporaryDirectory();
       String framesDir = '${tempDir.path}/frames';
       await Directory(framesDir).create(recursive: true);
-      print('Saving frames to $framesDir');
 
-      // Save each frame as an image
       for (int i = 0; i < _frames.length; i++) {
-        final image = _frames[i];
-        final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+        final byteData =
+            await _frames[i].toByteData(format: ui.ImageByteFormat.png);
         final file =
             File('$framesDir/frame_${i.toString().padLeft(4, '0')}.png');
         await file.writeAsBytes(byteData!.buffer.asUint8List());
-      }
-      print('Frames saved. Total frames: ${_frames.length}');
-
-      // Check first few frame files
-      print('First few frame files:');
-      for (int i = 0; i < min(_frames.length, 5); i++) {
-        File frame =
-            File('$framesDir/frame_${i.toString().padLeft(4, '0')}.png');
-        print('${frame.path} exists: ${await frame.exists()}');
+        setState(() {
+          _progress = i / _frames.length;
+        });
       }
 
-      // Compile images into video
       Directory appDocDir = await getApplicationDocumentsDirectory();
-      _videoPath = "${appDocDir.path}/output.mp4";
+      _videoPath =
+          "${appDocDir.path}/tactical_pad_${DateTime.now().millisecondsSinceEpoch}.mp4";
 
-      print('Compiling video to $_videoPath');
-
-      // Simplified FFmpeg command
-      // String command =
-      //     "-y -framerate 30 -i '$framesDir/frame_%04d.png' -c:v libx264 -pix_fmt yuv420p '$_videoPath'";
-      // String command =
-      //     "-y -framerate 30 -i '$framesDir/frame_%04d.png' -c:v mpeg4 '$_videoPath'";
       String command =
           "-y -framerate 30 -i '${framesDir}/frame_%04d.png' -c:v mpeg4 -pix_fmt yuv420p -movflags +faststart '${_videoPath}'";
 
-      // Execute FFmpeg command
-      final session = await FFmpegKit.execute(command);
-      final returnCode = await session.getReturnCode();
-      final output = await session.getOutput();
-      final logs = await session.getLogs();
+      // String command =
+      //     "-y -framerate 30 -i '$framesDir/frame_%04d.png' -c:v libx264 -preset ultrafast -crf 23 -pix_fmt yuv420p '$_videoPath'";
 
-      print('FFmpeg output: $output');
-      print('FFmpeg logs:');
-      for (Log log in logs) {
-        print('${log.getLevel()} - ${log.getMessage()}');
-      }
+      await FFmpegKit.executeAsync(
+          command,
+          (session) async {
+            final returnCode = await session.getReturnCode();
+            if (ReturnCode.isSuccess(returnCode)) {
+              print('Video compiled successfully');
+            } else {
+              print('Error compiling video. Return code: $returnCode');
+            }
+          },
+          (log) => print(log.getMessage()),
+          (statistics) {
+            setState(() {
+              _progress = statistics.getTime() /
+                  5000; // Assuming 5 seconds compilation time
+            });
+          });
 
-      if (ReturnCode.isSuccess(returnCode)) {
-        print('Video compiled successfully');
-      } else {
-        print('Error compiling video. Return code: $returnCode');
-      }
-
-      // Check if the file exists and its size
-      File videoFile = File(_videoPath!);
-      if (await videoFile.exists()) {
-        print('Video file exists at $_videoPath');
-        print('File size: ${await videoFile.length()} bytes');
-      } else {
-        print('Video file does not exist at $_videoPath');
-      }
-
-      // Clear the frames
       _frames.clear();
     } catch (e) {
       print('Error in compileFramesToVideo: $e');
@@ -645,6 +872,7 @@ class _TacticalPadState extends State<TacticalPad>
         ? _animatedPositions['player']!
         : playerPositions;
     return Scaffold(
+      key: _scaffoldKey,
       appBar: AppBar(
         title: Text(
           'PLP Tactical Board',
@@ -671,29 +899,13 @@ class _TacticalPadState extends State<TacticalPad>
           ),
         ),
         actions: [
+          // IconButton(
+          //   icon: Icon(Icons.save, color: Colors.white),
+          //   onPressed: _saveProject,
+          // ),
           IconButton(
-            icon: Icon(Icons.save, color: Colors.white),
-            onPressed: _saveProject,
-          ),
-          IconButton(
-            icon: Icon(
-              _isRecording ? Icons.stop : Icons.fiber_manual_record,
-              color: Colors.white,
-            ),
-            onPressed: () async {
-              if (_isRecording) {
-                await _stopRecording();
-              } else {
-                await _startRecording();
-              }
-            },
-          ),
-          IconButton(
-            icon: Icon(Icons.play_arrow, color: Colors.white),
-            onPressed: () {
-              _playVideo;
-              _toggleVideoOverlay();
-            },
+            icon: Icon(_isRecording ? Icons.stop : Icons.fiber_manual_record),
+            onPressed: _isRecording ? _stopRecording : _startRecording,
           ),
         ],
         elevation: 10,
@@ -731,9 +943,39 @@ class _TacticalPadState extends State<TacticalPad>
                   child: Stack(
                     children: [
                       CustomPaint(
-                        painter: DrawingPainter(_drawingObjects),
+                        painter: DrawingPainter(
+                          _drawingObjects,
+                          selectedObject: _selectedDrawingObject,
+                          dragOffset: _dragOffset,
+                        ),
                         child: Container(),
                       ),
+                      if (_isRecording)
+                        Positioned(
+                          top: 10,
+                          left: 10,
+                          child: Container(
+                            padding: EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.fiber_manual_record,
+                                    color: Colors.white, size: 20),
+                                SizedBox(width: 5),
+                                Text(
+                                  'Recording',
+                                  style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       // Display player markers
                       ...positionsToUse.map((position) {
                         return PlayerMarker(
@@ -989,34 +1231,75 @@ class _TacticalPadState extends State<TacticalPad>
           );
         },
       ),
-      bottomNavigationBar: BottomAppBar(
-        color: Color(0xFF2E74B8),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            IconButton(
-              icon: Icon(Icons.line_style),
-              onPressed: () => _startDrawing(DrawingType.line),
-            ),
-            IconButton(
-              icon: Icon(Icons.arrow_forward),
-              onPressed: () => _startDrawing(DrawingType.arrow),
-            ),
-            IconButton(
-              icon: Icon(Icons.circle_outlined),
-              onPressed: () => _startDrawing(DrawingType.circle),
-            ),
-            IconButton(
-              icon: Icon(Icons.text_fields),
-              onPressed: () => _startDrawing(DrawingType.text),
-            ),
-            IconButton(
-              icon: Icon(Icons.color_lens),
-              onPressed: () => _showColorPicker(),
-            ),
-          ],
-        ),
+      bottomNavigationBar: CustomBottomAppBar(
+        onDrawingTypeSelected: (DrawingBType type) {
+          if (type == DrawingBType.line) {
+            _startDrawing(DrawingType.line);
+          } else if (type == DrawingBType.arrow) {
+            _startDrawing(DrawingType.arrow);
+          } else if (type == DrawingBType.text) {
+            _startDrawing(DrawingType.text);
+          } else if (type == DrawingBType.freehand) {
+            _startDrawing(DrawingType.circle);
+          } else {
+            // Handle default case or unsupported types
+          }
+          // Handle drawing type selection
+          print('Selected drawing type: $type');
+        },
+        onAnimationPressed: () {
+          _toggleVideoOverlay();
+          // Handle animation button press
+          print('Animation pressed');
+        },
+        onItemsPressed: () {
+          _scaffoldKey.currentState!.openDrawer();
+          // Handle items button press
+          print('Items pressed');
+        },
+        onTextPressed: () {
+          _startDrawing(DrawingType.text);
+          // Handle text button press
+          print('Text pressed');
+        },
+        onNotesPressed: () {
+          // Handle notes button press
+          print('Notes pressed');
+        },
+        onEffectsPressed: () {
+          _showColorPicker();
+          // Handle effects button press
+          print('Effects pressed');
+        },
       ),
+      // bottomNavigationBar: BottomAppBar(
+      //   color: Color(0xFF2E74B8),
+      //   child: Row(
+      //     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      //     children: [
+      //       IconButton(
+      //         icon: Icon(Icons.line_style),
+      //         onPressed: () => _startDrawing(DrawingType.line),
+      //       ),
+      //       IconButton(
+      //         icon: Icon(Icons.arrow_forward),
+      //         onPressed: () => _startDrawing(DrawingType.arrow),
+      //       ),
+      //       IconButton(
+      //         icon: Icon(Icons.circle_outlined),
+      //         onPressed: () => _startDrawing(DrawingType.circle),
+      //       ),
+      //       IconButton(
+      //         icon: Icon(Icons.text_fields),
+      //         onPressed: () => _startDrawing(DrawingType.text),
+      //       ),
+      //       IconButton(
+      //         icon: Icon(Icons.color_lens),
+      //         onPressed: () => _showColorPicker(),
+      //       ),
+      //     ],
+      // ),
+      // ),
       drawer: DrawerMenu(onActionSelected: _onActionSelected),
       // floatingActionButton: FloatingActionButton(
       //   onPressed: () {

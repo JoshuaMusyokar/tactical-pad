@@ -12,7 +12,7 @@ class PlayerMarker extends ObjectMarker {
           onDragEnd: onDragEnd,
           onPositionChanged: onPositionChanged,
           imageAsset: 'lib/assets/player.png',
-          size: 60.0, // Player size
+          initialSize: 60.0, // Player size
         );
 }
 
@@ -27,7 +27,7 @@ class PlayerFourMarker extends ObjectMarker {
           onDragEnd: onDragEnd,
           onPositionChanged: onPositionChanged,
           imageAsset: 'lib/assets/player-4.png',
-          size: 60.0, // Player size
+          initialSize: 60.0, // Player size
         );
 }
 
@@ -42,7 +42,7 @@ class PlayerFiveMarker extends ObjectMarker {
           onDragEnd: onDragEnd,
           onPositionChanged: onPositionChanged,
           imageAsset: 'lib/assets/player-5.png',
-          size: 60.0, // Player size
+          initialSize: 60.0, // Player size
         );
 }
 
@@ -57,7 +57,7 @@ class PlayerSixMarker extends ObjectMarker {
           onDragEnd: onDragEnd,
           onPositionChanged: onPositionChanged,
           imageAsset: 'lib/assets/player-6.png',
-          size: 60.0, // Player size
+          initialSize: 60.0, // Player size
         );
 }
 
@@ -72,7 +72,7 @@ class CoachMarker extends ObjectMarker {
           onDragEnd: onDragEnd,
           onPositionChanged: onPositionChanged,
           imageAsset: 'lib/assets/coach.png',
-          size: 70.0, // Coach size
+          initialSize: 70.0, // Coach size
         );
 }
 
@@ -87,7 +87,7 @@ class ConeMarker extends ObjectMarker {
           onDragEnd: onDragEnd,
           onPositionChanged: onPositionChanged,
           imageAsset: 'lib/assets/cone.png',
-          size: 40.0, // Cone size
+          initialSize: 40.0, // Cone size
         );
 }
 
@@ -102,7 +102,7 @@ class LowConeMarker extends ObjectMarker {
           onDragEnd: onDragEnd,
           onPositionChanged: onPositionChanged,
           imageAsset: 'lib/assets/low-cone.png',
-          size: 40.0, // Cone size
+          initialSize: 40.0, // Cone size
         );
 }
 
@@ -117,7 +117,7 @@ class AgilityMarker extends ObjectMarker {
           onDragEnd: onDragEnd,
           onPositionChanged: onPositionChanged,
           imageAsset: 'lib/assets/agility.png',
-          size: 35.0, // Agility size
+          initialSize: 35.0, // Agility size
         );
 }
 
@@ -132,7 +132,7 @@ class StripMarker extends ObjectMarker {
           onDragEnd: onDragEnd,
           onPositionChanged: onPositionChanged,
           imageAsset: 'lib/assets/strip.png',
-          size: 30.0, // Strip size
+          initialSize: 30.0, // Strip size
         );
 }
 
@@ -147,7 +147,7 @@ class BasketMarker extends ObjectMarker {
           onDragEnd: onDragEnd,
           onPositionChanged: onPositionChanged,
           imageAsset: 'lib/assets/basket.png',
-          size: 50.0, // Basket size
+          initialSize: 50.0, // Basket size
         );
 }
 
@@ -162,7 +162,7 @@ class PodelpritMarker extends ObjectMarker {
           onDragEnd: onDragEnd,
           onPositionChanged: onPositionChanged,
           imageAsset: 'lib/assets/strip.png',
-          size: 30.0, // Podelprit size
+          initialSize: 30.0, // Podelprit size
         );
 }
 
@@ -177,6 +177,6 @@ class BallMarker extends ObjectMarker {
           onDragEnd: onDragEnd,
           onPositionChanged: onPositionChanged,
           imageAsset: 'lib/assets/ball.png',
-          size: 20.0, // Ball size
+          initialSize: 20.0, // Ball size
         );
 }

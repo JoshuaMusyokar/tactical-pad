@@ -68,6 +68,7 @@ class _ProGameVideoPlayerState extends State<ProGameVideoPlayer>
 
   @override
   Widget build(BuildContext context) {
+    print("VIdeo player openned");
     return AnimatedBuilder(
       animation: _animation,
       builder: (context, child) {
