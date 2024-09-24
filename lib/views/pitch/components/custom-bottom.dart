@@ -4,8 +4,11 @@ class CustomBottomAppBar extends StatelessWidget {
   final Function(DrawingBType) onDrawingTypeSelected;
   final VoidCallback onAnimationPressed;
   final VoidCallback onItemsPressed;
+  final VoidCallback onArrowPressed;
+  final VoidCallback onLinePressed;
   final VoidCallback onTextPressed;
   final VoidCallback onNotesPressed;
+  final VoidCallback onEraseMode;
   final VoidCallback onEffectsPressed;
 
   const CustomBottomAppBar({
@@ -14,7 +17,10 @@ class CustomBottomAppBar extends StatelessWidget {
     required this.onAnimationPressed,
     required this.onItemsPressed,
     required this.onTextPressed,
+    required this.onArrowPressed,
+    required this.onLinePressed,
     required this.onNotesPressed,
+    required this.onEraseMode,
     required this.onEffectsPressed,
   }) : super(key: key);
 
@@ -29,13 +35,10 @@ class CustomBottomAppBar extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            _buildButton(Icons.arrow_left, 'Arrow',
-                () => onDrawingTypeSelected(DrawingBType.arrow)),
-            _buildButton(Icons.line_weight, 'Line',
-                () => onDrawingTypeSelected(DrawingBType.line)),
+            _buildButton(Icons.arrow_left, 'Arrow', onArrowPressed),
+            _buildButton(Icons.line_weight, 'Line', onLinePressed),
             _buildButton(Icons.animation, 'Animation', onAnimationPressed),
-            _buildButton(Icons.draw, 'Draw',
-                () => onDrawingTypeSelected(DrawingBType.freehand)),
+            _buildButton(Icons.delete, 'Erase', onEraseMode),
             _buildButton(Icons.sports_soccer, 'Items', onItemsPressed),
             _buildButton(Icons.text_fields, 'Text', onTextPressed),
             _buildButton(Icons.music_note, 'Notes', onNotesPressed),

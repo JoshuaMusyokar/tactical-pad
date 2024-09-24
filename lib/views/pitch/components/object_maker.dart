@@ -99,6 +99,8 @@ class ObjectMarker extends StatefulWidget {
   final Function(Offset) onPositionChanged;
   final Function(double)? onSizeChanged;
   final double initialSize;
+  final double canvasScale;
+  final Offset canvasPanOffset;
 
   ObjectMarker({
     required this.position,
@@ -107,6 +109,8 @@ class ObjectMarker extends StatefulWidget {
     required this.onPositionChanged,
     this.onSizeChanged,
     this.initialSize = 40.0,
+    required this.canvasScale,
+    required this.canvasPanOffset,
   });
 
   @override
@@ -116,82 +120,76 @@ class ObjectMarker extends StatefulWidget {
 class _ObjectMarkerState extends State<ObjectMarker> {
   late Offset _position;
   late double _size;
+  double _scaleFactor = 1.0; // Track scale factor
+  Offset _lastFocalPoint = Offset.zero; // Track last focal point for panning
 
   @override
   void initState() {
     super.initState();
     _position = widget.position;
-    _size = widget.initialSize;
+    _size = widget.initialSize *
+        widget.canvasScale; // Initial size based on canvas scale
   }
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        DragTarget<Offset>(
-          onWillAccept: (data) => true,
-          onAccept: (data) {
+    // Adjust position based on canvas scale and pan offset
+    Offset adjustedPosition =
+        (_position - widget.canvasPanOffset) * widget.canvasScale;
+
+    return Positioned(
+      left: adjustedPosition.dx,
+      top: adjustedPosition.dy,
+      child: Container(
+        // color: Colors.transparent, // To capture gestures
+        child: GestureDetector(
+          onScaleUpdate: (details) {
             setState(() {
-              _position = data;
+              // Update scale (zoom)
+              _scaleFactor *= details.scale;
+
+              // Clamp the scale factor to stay within min and max limits
+              _scaleFactor = _scaleFactor.clamp(0.5, 3.0);
+
+              // Update size based on new scale factor
+              _size = widget.initialSize * _scaleFactor;
+
+              // Handle panning (dragging) during scale gesture
+              Offset delta = details.focalPoint - _lastFocalPoint;
+              _position += delta / widget.canvasScale;
+
+              _lastFocalPoint = details.focalPoint;
             });
-            widget.onDragEnd(data);
-            widget.onPositionChanged(data);
+
+            widget.onPositionChanged(_position);
           },
-          builder: (context, candidateData, rejectedData) {
-            return Container();
+          onScaleEnd: (details) {
+            _lastFocalPoint =
+                Offset.zero; // Reset focal point after scaling ends
+            // widget.onDragEnd(_position); // Notify parent when dragging ends
           },
-        ),
-        Positioned(
-          left: _position.dx,
-          top: _position.dy,
-          child: GestureDetector(
-            onScaleStart: (details) {
-              // Store the initial size when scaling starts
-              _size = widget.initialSize;
-            },
-            onScaleUpdate: (details) {
-              setState(() {
-                _size = widget.initialSize * details.scale;
-                _size = _size.clamp(20.0, 100.0);
-              });
-              print('Scale factor: ${details.scale}, Size: $_size');
-              if (widget.onSizeChanged != null) {
-                widget.onSizeChanged!(_size);
-              }
-            },
-            child: Draggable(
-              feedback: RepaintBoundary(
-                child: buildObjectMarker(),
-              ),
-              childWhenDragging: Opacity(
-                opacity: 0,
-                child: buildObjectMarker(),
-              ),
-              onDragEnd: (details) {
-                var renderBox = context.findRenderObject() as RenderBox;
-                final localOffset = renderBox.globalToLocal(details.offset);
-                Offset adjustedOffset = Offset(
-                  localOffset.dx - _size / 2,
-                  localOffset.dy - _size / 2,
-                );
-                setState(() {
-                  _position = adjustedOffset;
-                });
-                widget.onPositionChanged(adjustedOffset);
-              },
-              child: buildObjectMarker(),
-            ),
+          onScaleStart: (details) {
+            _lastFocalPoint =
+                details.focalPoint; // Set focal point when scaling starts
+          },
+          child: Image.asset(
+            widget.imageAsset,
+            width: _size,
+            height: _size,
           ),
         ),
-      ],
+      ),
     );
   }
 
-  Widget buildObjectMarker() {
-    return Image.asset(
-      widget.imageAsset,
-      width: _size,
-      height: _size,
-    );
+  @override
+  void didUpdateWidget(ObjectMarker oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Handle canvas scale change to update size
+    if (oldWidget.canvasScale != widget.canvasScale) {
+      setState(() {
+        _size = widget.initialSize * widget.canvasScale * _scaleFactor;
+      });
+    }
   }
 }

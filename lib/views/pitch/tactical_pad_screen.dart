@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:ui' as ui;
 import 'dart:io';
-
+import 'package:flutter/gestures.dart';
 import 'package:ffmpeg_kit_flutter/log.dart';
 import 'package:ffmpeg_kit_flutter/return_code.dart';
 import 'package:flutter/material.dart';
@@ -24,6 +24,7 @@ import 'package:tactical_pad/views/pitch/components/screen_recording.dart';
 // import 'package:tactical_pad/views/pitch/components/player_maker_painter.dart';
 import 'package:tactical_pad/views/pitch/components/timer_banner.dart';
 import 'package:tactical_pad/views/pitch/components/video_player.dart';
+import 'package:tactical_pad/views/pitch/components/zoomable.dart';
 import 'package:tactical_pad/views/pitch/frame_player.dart';
 import 'package:tactical_pad/views/pitch/repository_screen.dart';
 import 'package:tactical_pad/views/widgets/bottomsheet.dart';
@@ -57,6 +58,8 @@ class _TacticalPadState extends State<TacticalPad>
   DrawingObject? _selectedDrawingObject;
   Offset? _dragStartPosition;
   Offset? _dragOffset;
+  // DrawingObject? selectedObject;
+
   bool _isEraseMode = false;
   int _selectedIndex = 0;
   String? _currentProjectName;
@@ -64,11 +67,14 @@ class _TacticalPadState extends State<TacticalPad>
   bool _isRecording = false;
   int _frameCount = 0;
   double _progress = 0.0;
+  double _scale = 1.0;
+  double _canvasScale = 1.0;
+  Offset _canvasPanOffset = Offset.zero;
   // late Timer _recordingTimer;
   Duration _recordingTime = Duration.zero;
   late Map<String, List<Offset>> _positions;
   late Map<String, List<Offset>> _animatedPositions;
-
+  TextEditingController _textController = TextEditingController();
   late AnimationController _animationController;
   late Animation<double> _animation;
   DrawingType? _currentDrawingType;
@@ -78,6 +84,8 @@ class _TacticalPadState extends State<TacticalPad>
   TextEditingController _textEditingController = TextEditingController();
   GlobalKey _repaintBoundaryKey = GlobalKey();
   List<ui.Image> _frames = [];
+  bool isEraseMode = false;
+  DrawingObject? _currentDrawingObject;
   String? _videoPath;
   VideoPlayerController? _videoPlayerController;
   bool _isVideoOverlayVisible = false;
@@ -137,18 +145,6 @@ class _TacticalPadState extends State<TacticalPad>
     });
   }
 
-  void _showCreateProjectDialog() {
-    print('_showCreateProjectDialog');
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return CreateProjectDialog(
-          onProjectCreated: _onProjectCreated,
-        );
-      },
-    );
-  }
-
   Future<void> _initializeVideoPlayer() async {
     if (_videoPath != null && _videoPath!.isNotEmpty) {
       File videoFile = File(_videoPath!);
@@ -197,30 +193,6 @@ class _TacticalPadState extends State<TacticalPad>
     }
   }
 
-  void _onProjectCreated(String projectName) {
-    setState(() {
-      _currentProject = Project(
-        id: UniqueKey().toString(),
-        name: projectName,
-        createdAt: DateTime.now(),
-        playerPositions: [],
-        coachPositions: [],
-        conePositions: [],
-        // lowConePositions:[],
-        ballPositions: [],
-      );
-
-      DatabaseHelper().insertProject({
-        'id': _currentProject!.id,
-        'name': _currentProject!.name,
-        'createdAt': _currentProject!.createdAt.toIso8601String(),
-        'updatedAt': _currentProject!.updatedAt?.toIso8601String(),
-      });
-
-      // _startRecording();
-    });
-  }
-
   Future<void> _playbackFrames() async {
     if (_currentProject == null) return;
 
@@ -234,112 +206,6 @@ class _TacticalPadState extends State<TacticalPad>
       });
       await Future.delayed(Duration(milliseconds: 100)); // Delay between frames
     }
-  }
-
-  void _saveProject() {
-    if (_currentProject == null) return;
-
-    _currentProject!.playerPositions = playerPositions;
-    _currentProject!.coachPositions = coachPositions;
-    _currentProject!.conePositions = conePositions;
-    _currentProject!.ballPositions = ballPositions;
-
-    DatabaseHelper().updateProject({
-      'id': _currentProject!.id,
-      'name': _currentProject!.name,
-      'playerPositions': jsonEncode(
-          playerPositions.map((e) => {'dx': e.dx, 'dy': e.dy}).toList()),
-      'coachPositions': jsonEncode(
-          coachPositions.map((e) => {'dx': e.dx, 'dy': e.dy}).toList()),
-      'conePositions': jsonEncode(
-          conePositions.map((e) => {'dx': e.dx, 'dy': e.dy}).toList()),
-      'ballPositions': jsonEncode(
-          ballPositions.map((e) => {'dx': e.dx, 'dy': e.dy}).toList()),
-      'recordedFrames': jsonEncode(_currentProject!.recordedFrames),
-      'updatedAt': DateTime.now().toIso8601String(),
-    });
-  }
-
-  void playAnimation() {
-    if (_currentProject == null || _currentProject!.movementHistory.isEmpty) {
-      print("No project or movement history to animate.");
-      return;
-    }
-
-    print("Starting animation...");
-    int currentIndex = 0;
-    var movements = _currentProject!.movementHistory;
-
-    // Calculate total duration
-    var totalDuration =
-        movements.last['timestamp'] - movements.first['timestamp'];
-    _animationController.duration = Duration(milliseconds: totalDuration);
-
-    print("Animation duration set to $totalDuration milliseconds");
-
-    _animationController.forward(from: 0);
-    _animationController.addListener(() {
-      var currentTime = movements.first['timestamp'] +
-          (_animationController.value * totalDuration).round();
-
-      print("Animation progress: ${_animationController.value}");
-      print("Current time: $currentTime");
-
-      while (currentIndex < movements.length &&
-          movements[currentIndex]['timestamp'] <= currentTime) {
-        var movement = movements[currentIndex];
-        var objectType = movement['objectType'];
-        var index = movement['index'];
-        Offset newPosition;
-
-        // Debugging movement details
-        print(
-            "Processing movement: objectType=$objectType, index=$index, oldPosition=${movement['oldPosition']}, newPosition=${movement['newPosition']}, timestamp=${movement['timestamp']}");
-        print(
-            "current index: =$currentIndex, movement length-1=${movements.length - 1}");
-
-        // Check if there's a next movement to interpolate
-        if (currentIndex <= movements.length - 1) {
-          var nextMovement = movements[currentIndex + 1];
-          var t = (currentTime - movement['timestamp']) /
-              (nextMovement['timestamp'] - movement['timestamp']);
-          t = t.clamp(0.0, 1.0); // Ensure t is between 0 and 1
-          newPosition = Offset.lerp(movement['oldPosition'] as Offset,
-              movement['newPosition'] as Offset, t)!;
-
-          print(
-              "Interpolating between ${movement['oldPosition']} and ${movement['newPosition']} with t=$t");
-        } else {
-          newPosition = movement['newPosition'] as Offset;
-          print("Using final position: $newPosition");
-        }
-
-        // Update position in the state
-        setState(() {
-          if (_animatedPositions.containsKey(objectType) &&
-              index < _animatedPositions[objectType]!.length) {
-            _animatedPositions[objectType]![index] = newPosition;
-            print("Updated $objectType at index $index to $newPosition");
-          } else {
-            print("Failed to update position for $objectType at index $index");
-          }
-        });
-
-        // Move to the next movement if the current time is ahead
-        if (movements[currentIndex]['timestamp'] <= currentTime) {
-          currentIndex++;
-          print("Moving to next movement");
-        }
-      }
-
-      print("Current animated positions: ${_animatedPositions['player']}");
-    });
-
-    _animationController.addStatusListener((status) {
-      if (status == AnimationStatus.completed) {
-        print("Animation completed");
-      }
-    });
   }
 
   void _onActionSelected(String action) {
@@ -371,10 +237,10 @@ class _TacticalPadState extends State<TacticalPad>
       } else if (action == 'low_cone') {
         lowConePositions.add(const Offset(100, 100));
       } else if (action == 'new_project') {
-        _showCreateProjectDialog();
+        // _showCreateProjectDialog();
         // Navigator.of(context).pop();
       } else if (action == 'save_project') {
-        _saveProject();
+        // _saveProject();
       } else if (action == 'load_project') {
         // Implement loading logic
       } else if (action == 'record_timeframe') {
@@ -423,78 +289,130 @@ class _TacticalPadState extends State<TacticalPad>
 
   // void _onPanStart(DragStartDetails details) {
   //   if (_currentDrawingType != null) {
+  //     // Drawing a new object
   //     setState(() {
+  //       _currentDrawingPoints.clear(); // Clear previous points
   //       _currentDrawingPoints.add(details.localPosition);
+  //       _currentDrawingObject = DrawingObject(
+  //         type: _currentDrawingType!,
+  //         points: [details.localPosition],
+  //         color: _currentDrawingColor,
+  //       );
+  //       _drawingObjects.add(_currentDrawingObject!);
   //     });
+  //   } else {
+  //     // Check if a drawing object was touched
+  //     final hitObject = DrawingPainter(_drawingObjects)
+  //         .getObjectAtPoint(details.localPosition);
+  //     if (hitObject != null) {
+  //       setState(() {
+  //         _selectedDrawingObject = hitObject;
+  //         _dragStartPosition = details.localPosition;
+  //         _dragOffset = Offset.zero;
+  //       });
+  //     } else if (_currentDrawingType == DrawingType.text) {
+  //       // Open text input dialog immediately
+  //       _showTextInputDialog();
+  //     }
   //   }
   // }
+
   void _onPanStart(DragStartDetails details) {
+    RenderBox box = context.findRenderObject() as RenderBox;
+    Offset localPosition = box.globalToLocal(details.globalPosition);
+    print('onPanStart triggered at ${details.localPosition}');
+    print('onPanStart triggered at G ${localPosition}');
+    print('Current drawing type: $_currentDrawingType');
+
     if (_currentDrawingType != null) {
+      // Start a new drawing
       setState(() {
+        _currentDrawingPoints.clear(); // Clear previous points
         _currentDrawingPoints.add(details.localPosition);
+
+        _selectedDrawingObject = DrawingObject(
+          type: _currentDrawingType!,
+          points: [details.localPosition],
+          color: _currentDrawingColor,
+        );
+        _drawingObjects.add(_selectedDrawingObject!);
+        print('New drawing object created: ${_selectedDrawingObject!.type}');
+        print('Total objects: ${_drawingObjects.length}');
       });
     } else {
-      final hitObject = DrawingPainter(_drawingObjects)
-          .getObjectAtPoint(details.localPosition);
+      // Check if an existing object was touched
+      // final hitObject = DrawingPainter(_drawingObjects)
+      //     .getObjectAtPoint(details.localPosition);
+      final hitObject = _getTappedOObject(details.localPosition);
+      print('Drag started at position: ${details.localPosition}');
+      print('Selected hit object: ${hitObject}');
+      _handleObjectDetection(details.localPosition);
+
       if (hitObject != null) {
         setState(() {
           _selectedDrawingObject = hitObject;
           _dragStartPosition = details.localPosition;
           _dragOffset = Offset.zero;
         });
+        print('Selected existing object: ${_selectedDrawingObject!.type}');
+        print('Drag started at position: $_dragStartPosition');
+      } else {
+        print('No object selected');
       }
     }
   }
 
-  // void _onPanUpdate(DragUpdateDetails details) {
-  //   if (_currentDrawingType != null) {
-  //     setState(() {
-  //       _currentDrawingPoints.add(details.localPosition);
-  //     });
-  //   }
-  // }
   void _onPanUpdate(DragUpdateDetails details) {
-    if (_currentDrawingType != null) {
+    print("Pan updated at: ${details.localPosition}");
+
+    if (_currentDrawingType != null && _selectedDrawingObject != null) {
+      // Continue drawing
       setState(() {
-        _currentDrawingPoints.add(details.localPosition);
+        _selectedDrawingObject!.points.add(details.localPosition);
+        // _selectedDrawingObject!.updateBoundingBox();
       });
+      print("Drawing: ${_selectedDrawingObject!.type}");
+      print("Points count: ${_selectedDrawingObject!.points.length}");
     } else if (_selectedDrawingObject != null && _dragStartPosition != null) {
+      // Dragging an existing object
       setState(() {
-        _dragOffset = details.localPosition - _dragStartPosition!;
+        final newOffset = details.localPosition - _dragStartPosition!;
+        _dragOffset = newOffset;
       });
+      print("Dragging: ${_selectedDrawingObject!.type}");
+      print("Drag offset: $_dragOffset");
+    } else {
+      print("Pan update ignored: No active drawing or dragging");
     }
   }
 
   void _onPanEnd(DragEndDetails details) {
+    print("Pan ended");
     if (_currentDrawingType != null) {
-      setState(() {
-        if (_currentDrawingType == DrawingType.text) {
-          _showTextInputDialog();
-        } else {
-          _finishDrawing();
-        }
-      });
+      if (_currentDrawingType == DrawingType.text) {
+        // When drawing text, handle input dialog
+        _showTextInputDialog();
+      }
+      // Finish drawing
+      print("Finished drawing: ${_selectedDrawingObject!.type}");
+      print("Final point count: ${_selectedDrawingObject!.points.length}");
+      _currentDrawingType = null;
+      _currentDrawingType = null;
     } else if (_selectedDrawingObject != null && _dragOffset != null) {
+      // Apply the drag to the object
       setState(() {
         _selectedDrawingObject!.translate(_dragOffset!);
+        print("Finished dragging: ${_selectedDrawingObject!.type}");
+        print("Final position: ${_selectedDrawingObject!.points.first}");
+        print("Final bounding box: ${_selectedDrawingObject!.boundingBox}");
         _selectedDrawingObject = null;
         _dragStartPosition = null;
         _dragOffset = null;
       });
+    } else {
+      print("Pan end ignored: No active drawing or dragging");
     }
   }
-
-  // void _onPanEnd(DragEndDetails details) {
-  //   if (_currentDrawingType != null) {
-  //     setState(() {
-  //       if (_currentDrawingType == DrawingType.text) {
-  //         _showTextInputDialog();
-  //       } else {
-  //         _finishDrawing();
-  //       }
-  //     });
-  //   }
-  // }
 
   void _finishDrawing() {
     if (_currentDrawingPoints.isNotEmpty) {
@@ -506,6 +424,132 @@ class _TacticalPadState extends State<TacticalPad>
       _currentDrawingPoints.clear();
       _currentDrawingType = null;
     }
+  }
+
+  void _handleObjectDetection(Offset point) {
+    const double detectionRadius = 20.0;
+
+    final hitObject = _getTappedOObject(point);
+    if (hitObject != null) {
+      print('Object detected: ${hitObject.type} at $point');
+      _selectedDrawingObject = hitObject;
+    } else {
+      print('No object detected at $point');
+      _selectedDrawingObject = null;
+    }
+  }
+
+  bool _isPointInPolygon(Offset point, List<Offset> polygon) {
+    int intersectCount = 0;
+    for (int i = 0; i < polygon.length; i++) {
+      final p1 = polygon[i];
+      final p2 = polygon[(i + 1) % polygon.length];
+
+      if ((point.dy > min(p1.dy, p2.dy)) &&
+          (point.dy <= max(p1.dy, p2.dy)) &&
+          (point.dx <= max(p1.dx, p2.dx)) &&
+          (p1.dy != p2.dy)) {
+        double xIntersect =
+            (point.dy - p1.dy) * (p2.dx - p1.dx) / (p2.dy - p1.dy) + p1.dx;
+        if (p1.dx == p2.dx || point.dx <= xIntersect) {
+          intersectCount++;
+        }
+      }
+    }
+    return (intersectCount % 2 != 0); // Inside if odd, outside if even
+  }
+
+  Rect expandedBoundingBox(Rect boundingBox, double padding) {
+    return boundingBox.inflate(padding); // Inflate by padding on all sides
+  }
+// bool _isPointInPolygon(Offset point, List<Offset> polygon) {
+//   int intersectCount = 0;
+//   for (int i = 0; i < polygon.length; i++) {
+//     final p1 = polygon[i];
+//     final p2 = polygon[(i + 1) % polygon.length];
+
+//     if ((point.dy > min(p1.dy, p2.dy)) &&
+//         (point.dy <= max(p1.dy, p2.dy)) &&
+//         (point.dx <= max(p1.dx, p2.dx)) &&
+//         (p1.dy != p2.dy)) {
+//       double xIntersect = (point.dy - p1.dy) * (p2.dx - p1.dx) / (p2.dy - p1.dy) + p1.dx;
+//       if (p1.dx == p2.dx || point.dx <= xIntersect) {
+//         intersectCount++;
+//       }
+//     }
+//   }
+//   return (intersectCount % 2 != 0); // Inside if odd, outside if even
+// }
+
+  DrawingObject? _getTappedOObject(Offset point,
+      {double detectionRadius = 50.0}) {
+    print(
+        '\nChecking for tapped object at $point with radius $detectionRadius');
+    print('Total objects: ${_drawingObjects.length}');
+
+    for (var object in _drawingObjects.reversed) {
+      print('\nChecking object: ${object.type}');
+
+      // Check if any point of the object is within the detection radius
+      for (var objectPoint in object.points) {
+        if ((objectPoint - point).distance <= detectionRadius) {
+          print(
+              'Object ${object.type} found within radius at point $objectPoint');
+          return object;
+        }
+      }
+
+      print('Object ${object.type} not within detection radius');
+    }
+
+    print('No object found within radius at point $point');
+    return null;
+  }
+
+  DrawingObject? _getObjectByRegion(Offset point) {
+    for (var object in _drawingObjects.reversed) {
+      final center = object.boundingBox?.center;
+
+      if (center != null) {
+        double radius = 30.0; // Define object detection range (radius)
+
+        // Check if the point is within the radius of the object
+        if ((point - center).distanceSquared <= radius * radius) {
+          print("Found object in region: ${object.type}");
+          return object;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  DrawingObject? _getClosestObject(Offset point) {
+    const double detectionThreshold = 50.0; // Detection range for proximity
+
+    DrawingObject? closestObject;
+    double closestDistance = detectionThreshold; // Initial threshold
+
+    for (var object in _drawingObjects.reversed) {
+      // Calculate the distance between the gesture point and object center
+      final center = object.boundingBox?.center;
+
+      if (center != null) {
+        double distance = (point - center).distance;
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          closestObject = object;
+        }
+      }
+    }
+
+    if (closestObject != null) {
+      print("Closest object found: ${closestObject.type}");
+    } else {
+      print("No object within detection range.");
+    }
+
+    return closestObject;
   }
 
   void _showTextInputDialog() {
@@ -530,8 +574,12 @@ class _TacticalPadState extends State<TacticalPad>
             TextButton(
               child: Text('OK'),
               onPressed: () {
+                final text = _textEditingController.text;
+                print('drawing points ${_currentDrawingPoints.isNotEmpty}');
+                if (text.isNotEmpty && _currentDrawingPoints.isNotEmpty) {
+                  _addTextObject(text); // Pass the text to the method
+                }
                 Navigator.of(context).pop();
-                _addTextObject();
               },
             ),
           ],
@@ -540,19 +588,64 @@ class _TacticalPadState extends State<TacticalPad>
     );
   }
 
-  void _addTextObject() {
-    if (_currentDrawingPoints.isNotEmpty &&
-        _textEditingController.text.isNotEmpty) {
+  void _addTextObject(String text) {
+    print('adding text');
+    setState(() {
       _drawingObjects.add(DrawingObject(
         type: DrawingType.text,
         points: [_currentDrawingPoints.first],
-        text: _textEditingController.text,
+        text: text,
         color: _currentDrawingColor,
       ));
       _textEditingController.clear();
       _currentDrawingPoints.clear();
       _currentDrawingType = null;
+    });
+  }
+
+  void _onTapDown(TapDownDetails details) {
+    RenderBox box = context.findRenderObject() as RenderBox;
+    Offset localPosition = box.globalToLocal(details.globalPosition);
+
+    print("Tap location: ${details.localPosition}");
+    print("Tap Glocation: ${localPosition}");
+
+    // Loop through the drawing objects to find the tapped one
+    final tappedObject = _getTappedObject(details.localPosition);
+
+    if (tappedObject != null) {
+      print("Tapped on object: ${tappedObject.type}");
+    } else {
+      print("No object at this location");
     }
+
+    if (isEraseMode) {
+      if (tappedObject != null) {
+        setState(() {
+          _drawingObjects.remove(tappedObject); // Remove the tapped object
+        });
+      }
+    } else {
+      setState(() {
+        _selectedDrawingObject = tappedObject; // Select the object
+      });
+    }
+  }
+
+  DrawingObject? _getTappedObject(Offset point) {
+    const double radius = 20.0; // Define the radius for tap detection
+
+    for (var object in _drawingObjects.reversed) {
+      // Calculate the center point of the object's bounding box
+      final center = object.boundingBox?.center;
+
+      // Check if the bounding box exists and if the tap is within the radius
+      if (center != null && (point - center).distance <= radius) {
+        print("Found tapped object: ${object.type}");
+        return object;
+      }
+    }
+    return null;
   }
 
   void _showColorPicker() {
@@ -677,6 +770,29 @@ class _TacticalPadState extends State<TacticalPad>
     );
   }
 
+  void _eraseObject(DrawingObject object) {
+    setState(() {
+      _drawingObjects.remove(object);
+    });
+  }
+
+  // void _addTextObject() {
+  //   if (_currentDrawingPoints.isNotEmpty &&
+  //       _textEditingController.text.isNotEmpty) {
+  //     setState(() {
+  //       _drawingObjects.add(DrawingObject(
+  //         type: DrawingType.text,
+  //         points: [_currentDrawingPoints.first],
+  //         color: _currentDrawingColor,
+  //         text: _textEditingController.text,
+  //       ));
+  //       _textEditingController.clear();
+  //       _currentDrawingPoints.clear();
+  //       _currentDrawingType = null;
+  //     });
+  //   }
+  // }
+
   Future<void> _captureFrame() async {
     try {
       RenderRepaintBoundary boundary = _repaintBoundaryKey.currentContext!
@@ -763,32 +879,30 @@ class _TacticalPadState extends State<TacticalPad>
   //     print('Error in compileFramesToVideo: $e');
   //   }
   // }
-  Future<void> _compileFramesToVideo() async {
+  Future<String?> compileFramesToVideo(
+      List<ui.Image> frames, void Function(double) updateProgress) async {
     try {
       Directory tempDir = await getTemporaryDirectory();
       String framesDir = '${tempDir.path}/frames';
       await Directory(framesDir).create(recursive: true);
 
-      for (int i = 0; i < _frames.length; i++) {
-        final byteData =
-            await _frames[i].toByteData(format: ui.ImageByteFormat.png);
+      // Save frames in parallel
+      await Future.wait(frames.asMap().entries.map((entry) async {
+        int i = entry.key;
+        ui.Image image = entry.value;
+        final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
         final file =
             File('$framesDir/frame_${i.toString().padLeft(4, '0')}.png');
         await file.writeAsBytes(byteData!.buffer.asUint8List());
-        setState(() {
-          _progress = i / _frames.length;
-        });
-      }
+        updateProgress(i / frames.length * 0.5); // First 50% of progress
+      }));
 
       Directory appDocDir = await getApplicationDocumentsDirectory();
-      _videoPath =
+      String videoPath =
           "${appDocDir.path}/tactical_pad_${DateTime.now().millisecondsSinceEpoch}.mp4";
 
       String command =
-          "-y -framerate 30 -i '${framesDir}/frame_%04d.png' -c:v mpeg4 -pix_fmt yuv420p -movflags +faststart '${_videoPath}'";
-
-      // String command =
-      //     "-y -framerate 30 -i '$framesDir/frame_%04d.png' -c:v libx264 -preset ultrafast -crf 23 -pix_fmt yuv420p '$_videoPath'";
+          "-y -framerate 30 -i '$framesDir/frame_%04d.png' -c:v mpeg4 -pix_fmt yuv420p '$videoPath'";
 
       await FFmpegKit.executeAsync(
           command,
@@ -802,17 +916,74 @@ class _TacticalPadState extends State<TacticalPad>
           },
           (log) => print(log.getMessage()),
           (statistics) {
-            setState(() {
-              _progress = statistics.getTime() /
-                  5000; // Assuming 5 seconds compilation time
-            });
+            updateProgress(0.5 +
+                (statistics.getTime() / 5000) * 0.5); // Last 50% of progress
           });
 
-      _frames.clear();
+      return videoPath;
     } catch (e) {
       print('Error in compileFramesToVideo: $e');
+      return null;
     }
   }
+
+  Future<void> _compileFramesToVideo() async {
+    _videoPath = await compileFramesToVideo(_frames, (progress) {
+      setState(() {
+        _progress = progress;
+      });
+    });
+    _frames.clear();
+  }
+  // Future<void> _compileFramesToVideo() async {
+  //   try {
+  //     Directory tempDir = await getTemporaryDirectory();
+  //     String framesDir = '${tempDir.path}/frames';
+  //     await Directory(framesDir).create(recursive: true);
+
+  //     for (int i = 0; i < _frames.length; i++) {
+  //       final byteData =
+  //           await _frames[i].toByteData(format: ui.ImageByteFormat.png);
+  //       final file =
+  //           File('$framesDir/frame_${i.toString().padLeft(4, '0')}.png');
+  //       await file.writeAsBytes(byteData!.buffer.asUint8List());
+  //       setState(() {
+  //         _progress = i / _frames.length;
+  //       });
+  //     }
+
+  //     Directory appDocDir = await getApplicationDocumentsDirectory();
+  //     _videoPath =
+  //         "${appDocDir.path}/tactical_pad_${DateTime.now().millisecondsSinceEpoch}.mp4";
+
+  //     String command =
+  //         "-y -framerate 30 -i '${framesDir}/frame_%04d.png' -c:v mpeg4 -pix_fmt yuv420p -movflags +faststart '${_videoPath}'";
+
+  //     // String command =
+  //     //     "-y -framerate 30 -i '$framesDir/frame_%04d.png' -c:v libx264 -preset ultrafast -crf 23 -pix_fmt yuv420p '$_videoPath'";
+
+  //     await FFmpegKit.executeAsync(
+  //         command,
+  //         (session) async {
+  //           final returnCode = await session.getReturnCode();
+  //           if (ReturnCode.isSuccess(returnCode)) {
+  //             print('Video compiled successfully');
+  //           } else {
+  //             print('Error compiling video. Return code: $returnCode');
+  //           }
+  //         },
+  //         (log) => print(log.getMessage()),
+  //         (statistics) {
+  //           setState(() {
+  //             _progress = statistics.getTime() / 5000;
+  //           });
+  //         });
+
+  //     _frames.clear();
+  //   } catch (e) {
+  //     print('Error in compileFramesToVideo: $e');
+  //   }
+  // }
 
   Future<void> _playVideo() async {
     print('Attempting to play video');
@@ -841,6 +1012,12 @@ class _TacticalPadState extends State<TacticalPad>
   void _updateDebugInfo(String info) {
     setState(() {
       _debugInfo = info;
+    });
+  }
+
+  void toggleEraseMode() {
+    setState(() {
+      isEraseMode = !isEraseMode; // Toggle erase mode
     });
   }
 
@@ -935,11 +1112,49 @@ class _TacticalPadState extends State<TacticalPad>
                     fit: BoxFit.fill,
                   ),
                 ),
-                child: GestureDetector(
+                child: RawGestureDetector(
+                  gestures: <Type, GestureRecognizerFactory>{
+                    PanGestureRecognizer: GestureRecognizerFactoryWithHandlers<
+                        PanGestureRecognizer>(
+                      () => PanGestureRecognizer(),
+                      (PanGestureRecognizer instance) {
+                        instance
+                          ..onStart = (details) {
+                            _onPanStart(details);
+                          }
+                          ..onUpdate = (details) {
+                            _onPanUpdate(details);
+                          }
+                          ..onEnd = (details) {
+                            _onPanEnd(details);
+                          };
+                      },
+                    ),
+                    ScaleGestureRecognizer:
+                        GestureRecognizerFactoryWithHandlers<
+                            ScaleGestureRecognizer>(
+                      () => ScaleGestureRecognizer(),
+                      (ScaleGestureRecognizer instance) {
+                        instance
+                          ..onUpdate = (details) {
+                            setState(() {
+                              _scale = details.scale;
+                            });
+                          };
+                      },
+                    ),
+                    // Add factories for other gesture recognizers if needed
+                    TapGestureRecognizer: GestureRecognizerFactoryWithHandlers<
+                        TapGestureRecognizer>(
+                      () => TapGestureRecognizer(),
+                      (TapGestureRecognizer instance) {
+                        instance.onTapDown = (TapDownDetails details) {
+                          _onTapDown(details);
+                        };
+                      },
+                    ),
+                  },
                   behavior: HitTestBehavior.translucent,
-                  onPanStart: _onPanStart,
-                  onPanUpdate: _onPanUpdate,
-                  onPanEnd: _onPanEnd,
                   child: Stack(
                     children: [
                       CustomPaint(
@@ -948,7 +1163,11 @@ class _TacticalPadState extends State<TacticalPad>
                           selectedObject: _selectedDrawingObject,
                           dragOffset: _dragOffset,
                         ),
-                        child: Container(),
+                        child: Container(
+                          color: isEraseMode
+                              ? Colors.red.withOpacity(0.1)
+                              : Colors.transparent,
+                        ),
                       ),
                       if (_isRecording)
                         Positioned(
@@ -999,6 +1218,8 @@ class _TacticalPadState extends State<TacticalPad>
                             //       'player', index, position, newPosition);
                             // });
                           },
+                          canvasScale: _canvasScale,
+                          canvasPanOffset: _canvasPanOffset,
                         );
                       }).toList(),
                       // Display player markers
@@ -1024,6 +1245,8 @@ class _TacticalPadState extends State<TacticalPad>
                             //       'player', index, position, newPosition);
                             // });
                           },
+                          canvasScale: _canvasScale,
+                          canvasPanOffset: _canvasPanOffset,
                         );
                       }).toList(),
                       // Display player markers
@@ -1049,6 +1272,8 @@ class _TacticalPadState extends State<TacticalPad>
                             //       'player', index, position, newPosition);
                             // });
                           },
+                          canvasScale: _canvasScale,
+                          canvasPanOffset: _canvasPanOffset,
                         );
                       }).toList(),
                       // Display player markers
@@ -1074,6 +1299,8 @@ class _TacticalPadState extends State<TacticalPad>
                             //       'player', index, position, newPosition);
                             // });
                           },
+                          canvasScale: _canvasScale,
+                          canvasPanOffset: _canvasPanOffset,
                         );
                       }).toList(),
 
@@ -1092,6 +1319,8 @@ class _TacticalPadState extends State<TacticalPad>
                             _currentProject?.addCoordinate(
                                 newPosition, 'coach');
                           },
+                          canvasScale: _canvasScale,
+                          canvasPanOffset: _canvasPanOffset,
                         );
                       }).toList(),
 
@@ -1109,6 +1338,8 @@ class _TacticalPadState extends State<TacticalPad>
                             int index = playerPositions.indexOf(position);
                             _currentProject?.addCoordinate(newPosition, 'cone');
                           },
+                          canvasScale: _canvasScale,
+                          canvasPanOffset: _canvasPanOffset,
                         );
                       }).toList(),
                       // Display low cone markers
@@ -1126,6 +1357,8 @@ class _TacticalPadState extends State<TacticalPad>
                             _currentProject?.addCoordinate(
                                 newPosition, 'low_cone');
                           },
+                          canvasScale: _canvasScale,
+                          canvasPanOffset: _canvasPanOffset,
                         );
                       }).toList(),
 
@@ -1143,6 +1376,8 @@ class _TacticalPadState extends State<TacticalPad>
                             int index = playerPositions.indexOf(position);
                             _currentProject?.addCoordinate(newPosition, 'ball');
                           },
+                          canvasScale: _canvasScale,
+                          canvasPanOffset: _canvasPanOffset,
                         );
                       }).toList(),
                       ...agilityPositions.map((position) {
@@ -1159,6 +1394,8 @@ class _TacticalPadState extends State<TacticalPad>
                             _currentProject?.addCoordinate(
                                 newPosition, 'agility');
                           },
+                          canvasScale: _canvasScale,
+                          canvasPanOffset: _canvasPanOffset,
                         );
                       }).toList(),
                       // ...podelpritPositions.map((position) {
@@ -1194,6 +1431,8 @@ class _TacticalPadState extends State<TacticalPad>
                             _currentProject?.addCoordinate(
                                 newPosition, 'basket');
                           },
+                          canvasScale: _canvasScale,
+                          canvasPanOffset: _canvasPanOffset,
                         );
                       }).toList(),
                       ...stripPositions.map((position) {
@@ -1210,6 +1449,8 @@ class _TacticalPadState extends State<TacticalPad>
                             _currentProject?.addCoordinate(
                                 newPosition, 'strip');
                           },
+                          canvasScale: _canvasScale,
+                          canvasPanOffset: _canvasPanOffset,
                         );
                       }).toList(),
                       if (_isVideoOverlayVisible &&
@@ -1233,17 +1474,6 @@ class _TacticalPadState extends State<TacticalPad>
       ),
       bottomNavigationBar: CustomBottomAppBar(
         onDrawingTypeSelected: (DrawingBType type) {
-          if (type == DrawingBType.line) {
-            _startDrawing(DrawingType.line);
-          } else if (type == DrawingBType.arrow) {
-            _startDrawing(DrawingType.arrow);
-          } else if (type == DrawingBType.text) {
-            _startDrawing(DrawingType.text);
-          } else if (type == DrawingBType.freehand) {
-            _startDrawing(DrawingType.circle);
-          } else {
-            // Handle default case or unsupported types
-          }
           // Handle drawing type selection
           print('Selected drawing type: $type');
         },
@@ -1251,6 +1481,19 @@ class _TacticalPadState extends State<TacticalPad>
           _toggleVideoOverlay();
           // Handle animation button press
           print('Animation pressed');
+        },
+        onEraseMode: () {
+          toggleEraseMode();
+          print('eRASE pressed');
+        },
+        onLinePressed: () {
+          _startDrawing(DrawingType.line);
+          // Handle animation button press
+          print('Line pressed');
+        },
+        onArrowPressed: () {
+          _startDrawing(DrawingType.arrow);
+          print('Arrow pressed');
         },
         onItemsPressed: () {
           _scaffoldKey.currentState!.openDrawer();

@@ -27,6 +27,7 @@ android {
     namespace = "com.example.tactical_pad"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
+    buildToolsVersion "29.0.3"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
